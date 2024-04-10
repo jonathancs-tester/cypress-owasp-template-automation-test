@@ -1,0 +1,137 @@
+version: '3.3'
+services:
+  cypress-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: 4casthub-cypress:latest
+    container_name: 4casthub-${TEST_TYPE}-${MODE}
+    env_file: .env
+    environment:
+      - PROJECT_NAME
+      - TEST_TYPE
+      - FEATURE
+      - TAG
+      - DEVICE
+      - BROWSER
+      - MODE
+      - IS_CI
+      - DOWNLOAD_PATH
+      - RELEASE
+      - PROJECT_TIME_TOLERANCE_MINUTES
+    command: npm run 4casthub:${DEVICE}:${TEST_TYPE}:${MODE}
+    working_dir: /app
+    volumes:
+      - ./cypress/test-results:/app/cypress/test-results
+      - ./cypress/test-results/cucumber-json:/app/cypress/test-results/cucumber-json
+      - ./cypress/screenshots:/app/cypress/screenshots
+      - ./cypress/videos:/app/cypress/videos
+      - ./coverage:/app/coverage/
+      - .env:/app/.env
+      - ./cypress:/app/cypress
+      - ./cypress/html-info:/cypress/html-info
+  4casthub-report-html:
+    image: 4casthub-cypress:latest
+    container_name: 4casthub-html-report
+    env_file: .env
+    command: npm run report:html
+    working_dir: /app
+    volumes:
+      - ./cypress/test-results:/app/cypress/test-results
+      - ./cypress/test-results/cucumber-json:/app/cypress/test-results/cucumber-json
+      - ./cypress/screenshots:/app/cypress/screenshots
+      - ./cypress/videos:/app/cypress/videos
+      - ./coverage:/app/coverage/
+      - .env:/app/.env
+      - ./cypress:/app/cypress
+      - ./cypress/html-info:/cypress/html-info
+  4casthub-e2e-test:
+    image: 4casthub-cypress:latest
+    depends_on:
+      - cypress-test
+    container_name: ${PROJECT_NAME}-report
+    env_file: .env
+    command:  npm run ${PROJECT_NAME}:report
+    working_dir: /app
+    volumes:
+      - ./cypress/test-results:/app/cypress/test-results
+      - ./cypress/screenshots:/app/cypress/screenshots
+      - ./cypress/videos:/app/cypress/videos
+      - ./coverage:/app/coverage/
+      - .env:/app/.env
+  owasp-zap-security-stable:
+    image: owasp/zap2docker-stable
+    container_name: owasp-zap-stable-security
+    ports:
+      - "8080:8080"
+    command: bash -c "zap.sh -cmd -config database.request.bodysize=100000000 -config database.response.bodysize=100000000 && zap.sh -daemon -config connection.timeoutInSecs=1000 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true  -config api.disablekey=true -host 0.0.0.0"
+  4casthub-zap-security-active-scan-ui-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: 4casthub-owasp:latest
+    container_name: 4casthub-owasp-zap-security-ui
+    env_file: .env
+    environment:
+      - PROJECT_NAME
+      - TEST_TYPE
+      - FEATURE
+      - TAG
+      - DEVICE
+      - BROWSER
+      - MODE
+      - IS_CI
+      - DOWNLOAD_PATH
+      - RELEASE
+    command:  npm run owasp:cypress
+    working_dir: /app
+    volumes:
+      - ./security:/app/security
+      - ./cypress/test-results:/app/cypress/test-results
+      - ./cypress/test-results/cucumber-json:/app/cypress/test-results/cucumber-json
+      - ./cypress/screenshots:/app/cypress/screenshots
+      - ./cypress/videos:/app/cypress/videos
+      - ./coverage:/app/coverage/
+      - .env:/app/.env
+      - ./cypress:/app/cypress
+      - ./cypress/html-info:/cypress/html-info
+  4casthub-owasp-html:
+    image: 4casthub-owasp:latest
+    user: root
+    container_name: 4casthub-owasp-zap-security-report
+    env_file: .env
+    environment:
+      - PROJECT_NAME
+      - TEST_TYPE
+      - FEATURE
+      - TAG
+      - BROWSER
+    command: npm run owasp:zap-active-scan
+    volumes:
+      - ./security:/app/security
+      - .env:/app/.env
+  4casthub-zap-security-api-test:
+    image: owasp/zap2docker-stable
+    user: root
+    container_name: 4casthub-owasp-zap-security
+    env_file: .env
+    command:  zap-api-scan.py -t ${OPENAPI} -d -c config/rule.config -f openapi -z "-config /zap/wrk/options.prop -config connection.timeoutInSecs=180" -r config/reports/${REPORT}-owasp-zap-api-report.html
+    volumes:
+      - ./security:/zap/wrk/config:rw
+      - .env:/app/.env
+  4casthub-nikto-security-ui-test:
+    image: frapsoft/nikto
+    env_file: .env
+    container_name: 4casthub-nikto-security
+    command:  -h ${BASEURL} -Cgidirs all -Display D -evasion 1,2,3,4,5,6,7,8,A,B -mutate 1,2,3,4,5,6 -Tuning 1,2,3,4,5,6,7,8,9,0,a,b,c,x -o /tmp/nikto-ui-report.htm
+    volumes:
+      - ./cypress/test-results:/tmp
+      - .env:/app/.env
+  4casthub-nikto-security-api-test:
+    image: frapsoft/nikto
+    container_name: 4casthub-nikto-security
+    env_file: .env
+    command:  -h ${BASEURL} -Cgidirs all -Display D -evasion 1,2,3,4,5,6,7,8,A,B -mutate 1,2,3,4,5,6 -Tuning 1,2,3,4,5,6,7,8,9,0,a,b,c,x -o /tmp/nikto-api-report.htm
+    volumes:
+      - ./reports:/tmp
+      - .env:/app/.env
