@@ -1,0 +1,113 @@
+name: 4CastHub API Pentest (DAST) CD
+run-name: 4CastHub API Pentest (DAST) - ${{ github.event.inputs.environmentOption }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      testType:
+        type: choice
+        description: 'Framework'
+        options: 
+        - owasp
+      environmentOption:
+        type: choice
+        description: 'Select environment'
+        required: true
+        options:
+        - stg4ch
+        - tst4ch
+        - dev4ch
+
+permissions: write-all
+
+jobs:
+  owasp-zap-scan:
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        name: ["PREDICT_EXTERNAL_API",
+                "MODEL_UPDATE_EXTERNAL_API_BASEURL",
+                "FS_API_BASEURL_SERIES"]
+    name: Scan OWASP ZAP API - ${{ github.event.inputs.environmentOption }} (${{matrix.name}})
+    runs-on: ubuntu-latest
+    if: contains(github.event.inputs.testType, 'owasp')
+    environment: ${{ github.event.inputs.environmentOption }}
+    env:
+      PREDICT_EXTERNAL_API: ${{ secrets.PREDICT_EXTERNAL_API }}/openapi.json
+      MODEL_UPDATE_EXTERNAL_API_BASEURL: ${{ secrets.MODEL_UPDATE_EXTERNAL_API_BASEURL }}/openapi.json
+      FS_API_BASEURL_SERIES: ${{ secrets.FS_API_BASEURL_SERIES }}/openapi.json
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create report path
+        run: |
+          mkdir -p security/reports
+
+      - name: Get report name
+        id: report_Name
+        run: |
+          getName=$(echo "${{ env[ matrix.name ] }}" | grep -oP 'run-(.*?)-ue|(?<=.ai/)[^/]+')
+          
+          echo "new_name=$getName" >> $GITHUB_OUTPUT
+
+      - name: Scan OWASP ZAP API
+        run: |
+          env | grep '_USER\|_PWD\|_OTP\|BASEURL\|AUTH' > .env
+          docker-compose -f 'docker-compose.yml' up --build 4casthub-zap-security-api-test
+        env:
+          REPORT: ${{ steps.report_Name.outputs.new_name }}
+          OPENAPI: ${{ env[ matrix.name ] }}
+      
+      - name: Upload report results
+        uses: actions/upload-artifact@v4
+        with:
+          name: report_${{matrix.name}}
+          path: security/reports
+
+  generate-html:
+    continue-on-error: true
+    name: Generate HTML Report
+    runs-on: ubuntu-latest
+    if: always()
+    needs: owasp-zap-scan
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download results artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: security/reports/
+        continue-on-error: true
+
+      - name: Zip OWASP html report files
+        run: |
+          set -x
+          mkdir -p security/reports/owasp-zap-report/
+          echo ${{ matrix.name }}
+          echo "******************"
+          for folder in security/reports/*; do
+            echo "$folder"
+            echo "^^^^^^^^^^^^^^^^^^"
+            for file in "$folder"/*; do
+              echo $file
+              echo "---------------"
+              if [[ $file == *owasp-zap-api-report.html ]]; then
+                mv "$file" security/reports/owasp-zap-report/
+                echo "Moving $file to security/reports/owasp-zap-report/"
+              fi
+            done
+          done
+          zip -r security/reports/owasp-zap-report/OWASP_ZAP_API_${{ github.event.inputs.environmentOption }}.zip security/reports/owasp-zap-report/
+
+      - name: Storage OWASP ZAP Report
+        uses: actions/upload-artifact@v4
+        with: 
+          name: OWASP_ZAP_API_${{ github.event.inputs.environmentOption }}
+          path: security/reports/owasp-zap-report/
+      
+      - name: Publish Github Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./security/reports/
+          destination_dir: ${{github.event.inputs.environmentOption}}/4casthub/pentest/api/owasp

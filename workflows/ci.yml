@@ -1,0 +1,335 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - '**.feature'
+    branches: 
+      - 'master'
+      - 'release-**'
+
+  workflow_dispatch:
+
+permissions: write-all
+
+env:
+  PROJECT_NAME: 4casthub
+  DEVICE: web
+  IS_CI: CI
+  MODE: headless
+  DOWNLOAD_PATH: cypress/fixtures/downloads
+  ADMIN_USER: ${{ secrets.ADMIN_USER }}
+  ADMIN_PWD: ${{ secrets.ADMIN_PWD }}
+  ADMIN_OTP: ${{ secrets.ADMIN_OTP }}
+  READ_PROJECT_USER: ${{ secrets.READ_PROJECT_USER }}
+  READ_PROJECT_PWD: ${{ secrets.READ_PROJECT_PWD }}
+  READ_PROJECT_OTP: ${{ secrets.READ_PROJECT_OTP }}
+  MANAGER_USER: ${{ secrets.MANAGER_USER }}
+  MANAGER_PWD: ${{ secrets.MANAGER_PWD }}
+  MANAGER_OTP: ${{ secrets.MANAGER_OTP }}
+  MANAGER_USER_FIREFOX: ${{ secrets.MANAGER_USER_FIREFOX }}
+  MANAGER_PWD_FIREFOX: ${{ secrets.MANAGER_PWD_FIREFOX }}
+  MANAGER_OTP_FIREFOX: ${{ secrets.MANAGER_OTP_FIREFOX }}
+  MANAGER_WITHOUT_PROJECT_USER: ${{ secrets.MANAGER_WITHOUT_PROJECT_USER }}
+  MANAGER_WITHOUT_PROJECT_PWD: ${{ secrets.MANAGER_WITHOUT_PROJECT_PWD }}
+  MANAGER_WITHOUT_PROJECT_OTP: ${{ secrets.MANAGER_WITHOUT_PROJECT_OTP }}
+  MANAGER_WITHOUT_PROJECT_USER_FIREFOX: ${{ secrets.MANAGER_WITHOUT_PROJECT_USER_FIREFOX }}
+  MANAGER_WITHOUT_PROJECT_PWD_FIREFOX: ${{ secrets.MANAGER_WITHOUT_PROJECT_PWD_FIREFOX }}
+  MANAGER_WITHOUT_PROJECT_OTP_FIREFOX: ${{ secrets.MANAGER_WITHOUT_PROJECT_OTP_FIREFOX }}
+  ADMIN_USER_FIREFOX: ${{ secrets.ADMIN_USER_FIREFOX }}
+  ADMIN_PWD_FIREFOX: ${{ secrets.ADMIN_PWD_FIREFOX }}
+  ADMIN_OTP_FIREFOX: ${{ secrets.ADMIN_OTP_FIREFOX }}
+  VIEW_USER_FIREFOX: ${{ secrets.VIEW_USER_FIREFOX }}
+  VIEW_PWD_FIREFOX: ${{ secrets.VIEW_PWD_FIREFOX }}
+  VIEW_OTP_FIREFOX: ${{ secrets.VIEW_OTP_FIREFOX }}
+  VIEW_USER: ${{ secrets.VIEW_USER }}
+  VIEW_PWD: ${{ secrets.VIEW_PWD }}
+  VIEW_OTP: ${{ secrets.VIEW_OTP }}
+  INVALID_USER: ${{ secrets.INVALID_USER }}
+  INVALID_PWD: ${{ secrets.INVALID_PWD }}
+  INVALID_OTP: ${{ secrets.INVALID_OTP }}
+  ADMIN_CENARIOS_USER: ${{ secrets.CENARIOS_UI_ADMIN_USER }}
+  ADMIN_CENARIOS_PWD: ${{ secrets.CENARIOS_UI_ADMIN_PWD }}
+  ADMIN_CENARIOS_OTP: ${{ secrets.CENARIOS_UI_ADMIN_OTP }}
+  EDITOR_USER: ${{ secrets.CENARIOS_UI_EDITOR_USER }}
+  EDITOR_PWD: ${{ secrets.CENARIOS_UI_EDITOR_PWD }}
+  EDITOR_OTP: ${{ secrets.CENARIOS_UI_EDITOR_OTP }}
+  OCB_USER: ${{ secrets.CENARIOS_UI_OCB_USER }}
+  OCB_PWD: ${{ secrets.CENARIOS_UI_OCB_PWD }}
+  OCB_OTP: ${{ secrets.CENARIOS_UI_OCB_OTP }}
+  STG_USER: ${{ secrets.CENARIOS_UI_STG_USER }}
+  STG_PWD: ${{ secrets.CENARIOS_UI_STG_PWD }}
+  STG_OTP: ${{ secrets.CENARIOS_UI_STG_OTP }}
+  VIEW_CENARIOS_USER: ${{ secrets.CENARIOS_UI_VIEW_USER }}
+  VIEW_CENARIOS_PWD: ${{ secrets.CENARIOS_UI_VIEW_PWD }}
+  VIEW_CENARIOS_OTP: ${{ secrets.CENARIOS_UI_VIEW_OTP }}
+  TIME_SERIES_USER: ${{ secrets.TIME_SERIES_USER }}
+  TIME_SERIES_PWD: ${{ secrets.TIME_SERIES_PWD }}
+  TIME_SERIES_OTP: ${{ secrets.TIME_SERIES_OTP }}
+  CLASSIFICATION_USER: ${{ secrets.CLASSIFICATION_USER }}
+  CLASSIFICATION_PWD: ${{ secrets.CLASSIFICATION_PWD }}
+  CLASSIFICATION_OTP: ${{ secrets.CLASSIFICATION_OTP }}
+  FEATURE_STORE_USER: ${{ secrets.FEATURE_STORE_USER }}
+  FEATURE_STORE_PWD: ${{ secrets.FEATURE_STORE_PWD }}
+  FEATURE_STORE_OTP: ${{ secrets.FEATURE_STORE_OTP }}
+  FREEMIUM_USER: ${{ secrets.FREEMIUM_USER }}
+  FREEMIUM_USER_PWD: ${{ secrets.FREEMIUM_USER_PWD }}
+  FREEMIUM_USER_OTP: ${{ secrets.FREEMIUM_USER_OTP }}
+  FREEMIUM_USER_FIREFOX: ${{ secrets.FREEMIUM_USER_FIREFOX }}
+  FREEMIUM_USER_PWD_FIREFOX: ${{ secrets.FREEMIUM_USER_PWD_FIREFOX }}
+  FREEMIUM_USER_OTP_FIREFOX: ${{ secrets.FREEMIUM_USER_OTP_FIREFOX }}
+  RELEASE: ${{ github.event.pull_request.base.ref }}
+
+jobs:
+  generate-tokens:
+    name: Generate Tokens
+    runs-on: ubuntu-latest
+    if: ${{ contains(github.event.pull_request.title, 'classification') || contains(github.event.pull_request.title, 'time-series') || contains(github.event.pull_request.title, 'feature-store') || contains(github.event.pull_request.title, 'general') }}
+    environment: stg4ch
+    env:
+      AUTH_AUDIENCE: ${{ secrets.AUTH_AUDIENCE }}
+      AUTH_DOMAIN: ${{ secrets.AUTH_DOMAIN }}
+      AUTH_CLIENT_ID: ${{ secrets.AUTH_CLIENT_ID }}
+      AUTH_SCOPE: ${{ secrets.AUTH_SCOPE }} 
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate tokens chrome
+        run: |
+          env | grep '_USER\|_PWD\|_OTP\|BASEURL\|AUTH' > .env
+          docker-compose -f 'docker-compose.yml' up --build cypress-test
+        env:
+          TEST_TYPE: tokens
+          FEATURE: '@FEATURE_STORE_TIMESERIES'
+          BROWSER: chrome
+          FAAS_BASEURL: ${{ secrets.FAAS_BASEURL }}
+      - name: Upload html-info artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-info-chrome.json
+          path: cypress/html-info/html-info-chrome/
+      - name: Generate tokens firefox
+        run: |
+          env | grep '_USER\|_PWD\|_OTP\|BASEURL\|AUTH' > .env
+          docker-compose -f 'docker-compose.yml' up cypress-test
+        env:
+          TEST_TYPE: tokens
+          FEATURE: '@FEATURE_STORE_TIMESERIES'
+          BROWSER: firefox
+          FAAS_BASEURL: ${{ secrets.FAAS_BASEURL }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: authToken
+          path: cypress/auth-token/
+      - name: Upload html-info artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-info-firefox.json
+          path: cypress/html-info/html-info-firefox/
+
+  generate-scenarios:
+    name: Generate Scenarios - stg4ch
+    runs-on: ubuntu-latest
+    needs: generate-tokens
+    outputs:
+      tags: ${{ steps.output-tags.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate cucumber tags
+        id: output-tags
+        run: |
+          tags=()
+          git fetch origin ${{ github.event.pull_request.base.ref }} ${{ github.event.pull_request.head.ref }}
+          for file in $(git diff --name-only origin/${{ github.event.pull_request.base.ref }}...origin/${{ github.event.pull_request.head.ref }} -- | grep "\.feature$"); do
+              firstLine=$(head -n 1 "$file" | sed 's/^@//')
+              tags+=("$firstLine")
+          done
+
+          formatted_tags=$(printf '"%s",\n' "${tags[@]}" | tr -d '\n')
+          formatted_tags=[$formatted_tags]
+          echo "$formatted_tags"
+
+          echo "tags=$formatted_tags" >> $GITHUB_OUTPUT
+
+  test-CI:
+    continue-on-error: false
+    runs-on: ubuntu-latest
+    needs: generate-scenarios
+    strategy:
+        fail-fast: false
+        matrix:
+          name: ["chrome","firefox"]
+          tags: ${{ fromJSON(needs.generate-scenarios.outputs.tags) }}
+    name: ${{ matrix.tags }} - ${{ matrix.name }}
+    environment: stg4ch
+    env:
+      FEATURE: ${{ matrix.tags }}
+      AUTH_AUDIENCE: ${{ secrets.AUTH_AUDIENCE }}
+      AUTH_DOMAIN: ${{ secrets.AUTH_DOMAIN }}
+      AUTH_CLIENT_ID: ${{ secrets.AUTH_CLIENT_ID }}
+      AUTH_SCOPE: ${{ secrets.AUTH_SCOPE }} 
+      FAAS_API_BASEURL: ${{ secrets.FAAS_API_BASEURL }}
+      FEATURE_STORE_API_BASEURL: ${{ secrets.FEATURE_STORE_API_BASEURL }}
+      FAAS_MODELING_API_BASEURL: ${{ secrets.FAAS_MODELING_API_BASEURL }}
+      FS_API_BASEURL_SERIES: ${{ secrets.FEATURE_STORE_API_BASEURL_SERIES }}
+      FAAS_BASEURL: ${{ secrets.FAAS_BASEURL }}
+      PICK_FOR_ME_API_BASEURL: ${{ secrets.PICK_FOR_ME_API_BASEURL }} 
+    steps:
+      - name: Select Feature
+        id: setFeatureSelected
+        run: |
+          if [[ "${{ github.event.pull_request.title }}" =~ "classification" ]]; then
+              featureSelected="CLASSIFICATION"
+          elif [[ "${{ github.event.pull_request.title }}" =~ "time-series" ]]; then
+              featureSelected="TIMESERIES"
+          elif [[ "${{ github.event.pull_request.title }}" =~ "feature-store" ]]; then
+              featureSelected="FEATURE_STORE"
+          elif [[ "${{ github.event.pull_request.title }}" =~ "general" ]]; then
+              featureSelected="TIMESERIES"
+          fi
+          echo "feature=$featureSelected" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+      - name: Select version modelling
+        id: update_tag
+        run: |
+          set -x
+          if [[ "${{ github.event.inputs.testType }}" == "sanity" ]]; then
+            updated_tag="${{matrix.tags}} and @SANITY"
+          else
+            updated_tag="${{matrix.tags}}"
+          fi
+          
+          echo "new_tag=$updated_tag" >> $GITHUB_OUTPUT
+          
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: authToken
+          path: cypress/auth-token/
+        continue-on-error: true
+
+      - name: Install modules ESLINT
+        run: npm install --no-save
+
+      - name: Run ESLINT
+        run: |
+          npm run eslint
+          rm -rf node_modules
+      
+      - name: Run Regression tests - ${{matrix.name}} Headless
+        run: |
+          env | grep '_USER\|_PWD\|_OTP\|BASEURL\|AUTH' > .env
+          docker-compose -f 'docker-compose.yml' up --build cypress-test
+        env:
+          TEST_TYPE: test 
+          BROWSER: ${{matrix.name}}
+          FEATURE: ${{ steps.setFeatureSelected.outputs.feature }}
+          TAG: ${{ steps.update_tag.outputs.new_tag }}
+
+      - name: Upload test-results artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: test_results_${{ matrix.tags }}_${{matrix.name}}
+          path: cypress/test-results/cucumber-json/
+
+      - name: Upload screenshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots_${{ matrix.tags }}_${{matrix.name}}
+          path: cypress/screenshots/
+      
+      - name: Generate Log
+        id: log
+        run: |
+          docker-compose -f "docker-compose.yml" logs -f >> cypress-test.log
+          echo "test-result=$(grep -oh -m 1 'AssertionError\|CypressError\|failing\|Error:' cypress-test.log)">> $GITHUB_OUTPUT
+     
+      - name: Test Result - FAILED
+        if: contains(steps.log.outputs.test-result, 'Error') || contains(steps.log.outputs.test-result, 'failing')
+        uses: actions/github-script@v7
+        with:
+          script: |
+              core.setFailed('Test Result: FAILED')
+
+      - name: Test Result - PASSED
+        if: "!contains(steps.log.outputs.test-result, 'Error') || !contains(steps.log.outputs.test-result, 'failing')"
+        run: |
+          echo "Test Result: PASSED"
+      
+  generate-html:
+    continue-on-error: true
+    name: Generate HTML Report
+    runs-on: ubuntu-latest
+    if: always()
+    needs: test-CI
+    strategy:
+        fail-fast: false
+        matrix:
+          name: ["chrome","firefox"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: make dir
+        run: |
+          mkdir cypress/screenshot
+          mkdir -p cypress/test-results/cucumber-json
+          mkdir -p cypress/download-results
+
+      - name: Download results artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: cypress/download-results
+        continue-on-error: true
+
+      - name: Download html-info artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: html-info-${{matrix.name}}.json
+          path: cypress/html-info/html-info-${{matrix.name}}/
+
+      - name: move files
+        run: |
+          set -x
+          mkdir -p cypress/screenshots
+          mkdir -p cypress/test-results/cucumber-json
+          echo ${{ matrix.name }}
+          echo "******************"
+          for folder in cypress/download-results/*; do
+            echo "$folder"
+            echo "^^^^^^^^^^^^^^^^^^"
+            for file in "$folder"/*; do
+              echo $file
+              echo "---------------"
+              if [[ "$folder" == *${{ matrix.name }}* && $file == *.cucumber.json ]]; then
+                echo "Moving $file to cypress/test-results/cucumber-json/"
+                mv "$file" cypress/test-results/cucumber-json/
+              elif [[ "$folder" == *screenshots* && "$folder" == *${{ matrix.name }} ]]; then
+                mv "$file" cypress/screenshots/
+                echo "Moving $file to cypress/screenshots/"
+              fi
+            done
+          done
+      
+      - name: Generate HTML Report
+        run: |
+          env | grep '_USER\|_PWD\|_OTP\|BASEURL\|AUTH' > .env
+          npm install --no-save
+          npm run report:html -- --debug
+        env:
+          BROWSER: ${{matrix.name}}
+          TEST_TYPE: test 
+          FAAS_BASEURL: ${{ secrets.FAAS_BASEURL }}
+
+      - name: Storage HTML Report
+        uses: actions/upload-artifact@v4
+        with: 
+          name: CI HTML Report - ${{ matrix.name }}
+          path: cypress/test-results/
+
+      - name: Delete authToken file
+        uses: geekyeggo/delete-artifact@v4
+        with:
+            name: authToken
